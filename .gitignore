@@ -1,0 +1,15 @@
+.env
+.env.local
+
+.next
+.next/
+
+node_modules
+node_modules/
+
+next-env.d.ts
+
+commit.py
+
+.agent
+.agent/

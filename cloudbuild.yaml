@@ -1,0 +1,46 @@
+substitutions:
+  _RUNTIME_SA: matchday-runtime
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: Debug substitution
+    name: alpine
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        echo "=== TRIGGER VARIABLE ==="
+        echo "_NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${_NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}"
+        echo "========================"
+
+  - id: Build image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "--build-arg=NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${_NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}"
+      - "-t"
+      - "${_DEPLOY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}"
+      - "."
+
+  - id: Push image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - "${_DEPLOY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}"
+
+  - id: Deploy to Cloud Run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_SERVICE_NAME}"
+      - "--image=${_DEPLOY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}"
+      - "--region=${_DEPLOY_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+
+images:
+  - "${_DEPLOY_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}"
