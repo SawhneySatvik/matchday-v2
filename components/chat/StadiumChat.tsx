@@ -5,8 +5,10 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Loader2, Sparkles, Ticket, User, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMatchDayStore, ChatMessage, MatchPhase } from "@/lib/store";
+import { useMatchDayStore, ChatMessage, MatchPhase, PlanItem } from "@/lib/store";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+
 
 const PHASE_PROMPTS: Record<MatchPhase, string[]> = {
   "pre-match": [
@@ -82,7 +84,7 @@ function ContextChipBar() {
   );
 }
 
-export function StadiumChat() {
+export function StadiumChat(): React.JSX.Element {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -106,7 +108,7 @@ export function StadiumChat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
 
-  async function sendMessage(text: string, planUpdate = false) {
+  async function sendMessage(text: string, planUpdate = false): Promise<void> {
     if (!text.trim() || isLoading || !ticket) return;
 
     const userMsg: ChatMessage = {
@@ -121,6 +123,7 @@ export function StadiumChat() {
     // Detect plan-update intent from keywords
     const updateKeywords = ["update", "plan", "leaving", "leave early", "change", "raining", "food now", "kid", "score"];
     const isPlanUpdate = planUpdate || updateKeywords.some((kw) => text.toLowerCase().includes(kw));
+    trackEvent("chat_message_sent", { isUpdate: isPlanUpdate });
 
     try {
       const res = await fetch("/api/venue-chat", {
@@ -140,7 +143,10 @@ export function StadiumChat() {
       });
 
       if (!res.ok) throw new Error("Chat failed");
-      const { response, updatedPlan } = await res.json();
+      const { response, updatedPlan } = (await res.json()) as { 
+        response: string; 
+        updatedPlan: PlanItem[] | null 
+      };
 
       addChatMessage({
         role: "assistant",
@@ -152,7 +158,7 @@ export function StadiumChat() {
         setPlan(updatedPlan);
         toast.success("Your plan was updated!");
       }
-    } catch {
+    } catch (error: unknown) {
       toast.error("Couldn't get a response. Try again.");
     } finally {
       setIsLoading(false);

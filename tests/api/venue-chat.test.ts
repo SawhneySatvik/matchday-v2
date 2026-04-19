@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import * as gemini from "@/lib/gemini";
-import { POST } from "./route";
+import { POST } from "@/app/api/venue-chat/route";
 
 vi.mock("@/lib/gemini", () => ({
   getFlashModel: vi.fn(),

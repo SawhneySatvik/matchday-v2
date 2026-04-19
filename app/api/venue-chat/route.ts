@@ -1,9 +1,11 @@
-// app/api/venue-chat/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getFlashModel, parseGeminiJSON } from "@/lib/gemini";
 import { ChatMessage, TicketData, UserPreferences, VenueInfo, PlanItem, CrowdZone, MatchPhase } from "@/lib/store";
+import { logInfo, logError, logApiCall } from "@/lib/logger";
+import { getEnv } from "@/lib/env";
 
-// SAVE TO PROMPT LIBRARY
+const ROUTE_NAME = "/api/venue-chat";
+
 const SYSTEM_CONTEXT = (
   ticket: TicketData,
   preferences: UserPreferences,
@@ -48,10 +50,24 @@ ${planUpdate ? "- The fan is requesting a plan update. You MUST return an update
 - If asked about timing, always reason based on the kickoff time
 - Use the crowd intelligence data when advising about best times and routes`;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const start = Date.now();
   try {
+    const env = getEnv();
     const { message, history, ticket, preferences, venueInfo, plan, matchPhase, crowdData, planUpdate } =
-      await req.json();
+      (await req.json()) as {
+        message: string;
+        history: ChatMessage[];
+        ticket: TicketData;
+        preferences: UserPreferences;
+        venueInfo: VenueInfo | null;
+        plan: PlanItem[];
+        matchPhase?: MatchPhase;
+        crowdData?: CrowdZone[] | null;
+        planUpdate?: boolean;
+      };
+
+    logInfo(ROUTE_NAME, { message: "Starting venue chat", userMessage: message });
 
     const model = getFlashModel();
     const chat = model.startChat({
@@ -98,15 +114,14 @@ export async function POST(req: NextRequest) {
       .replace(/\{[\s\S]*"updatedPlan"[\s\S]*\}/g, "")
       .trim();
 
+    logApiCall(ROUTE_NAME, Date.now() - start, 200);
     return NextResponse.json({ response: displayText, updatedPlan });
-  } catch (error) {
-    console.error("[venue-chat] Error:", error);
+  } catch (error: unknown) {
+    logError(ROUTE_NAME, error);
+    logApiCall(ROUTE_NAME, Date.now() - start, 500);
     return NextResponse.json(
       { error: "Failed to get response." },
       { status: 500 }
     );
   }
 }
-
-// TODO(01:12): Add conversational API for venue-related queries
-// TODO(01:12): Improve contextual responses for real-time stadium queries

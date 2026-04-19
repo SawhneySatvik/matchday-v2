@@ -10,6 +10,8 @@ import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { TravelScreen } from "@/components/travel/TravelScreen";
 import { VenueScreen } from "@/components/venue/VenueScreen";
 import { PlanScreen } from "@/components/plan/PlanScreen";
+import { useEffect } from "react";
+import { trackEvent, trackPageView } from "@/lib/analytics";
 
 const STAGES: { key: Stage; label: string; icon: React.ElementType }[] = [
   { key: "upload", label: "Ticket", icon: Ticket },
@@ -36,8 +38,13 @@ const PREV_STAGE: Record<string, Stage> = {
   live: "plan",
 };
 
-export default function Home() {
+export default function Home(): React.JSX.Element {
   const { stage } = useMatchDayStore();
+
+  useEffect(() => {
+    trackPageView(`/${stage}`);
+    trackEvent("stage_transition", { to: stage });
+  }, [stage]);
 
   if (stage === "landing") {
     return (
@@ -46,6 +53,7 @@ export default function Home() {
       </main>
     );
   }
+
 
   const StageComponent = STAGE_COMPONENTS[stage];
 

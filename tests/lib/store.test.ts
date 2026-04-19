@@ -116,4 +116,70 @@ describe("useMatchDayStore", () => {
     expect(next.ticket).toBeNull();
     expect(next.savedSessions).toHaveLength(5);
   });
+
+  it("sets various state pieces", () => {
+    const state = useMatchDayStore.getState();
+    state.setVenueInfo({ 
+      foodStalls: [], 
+      gates: [], 
+      restrooms: [], 
+      medicalPoints: [], 
+      atms: [] 
+    });
+    state.addChatMessage({ role: "user", content: "hi", timestamp: new Date().toISOString() });
+    state.setVenueCoords({ lat: 18, lng: 72 });
+    state.setCrowdData(sampleCrowd);
+    state.setMatchPhase("post-match");
+    state.setExitPlan({ leaveByTime: "9 PM" } as any);
+
+    const next = useMatchDayStore.getState();
+    expect(next.venueInfo?.foodStalls).toEqual([]);
+    expect(next.chatHistory).toHaveLength(1);
+    expect(next.venueCoords).toEqual({ lat: 18, lng: 72 });
+    expect(next.crowdData).toEqual(sampleCrowd);
+    expect(next.matchPhase).toBe("post-match");
+    expect(next.exitPlan?.leaveByTime).toBe("9 PM");
+  });
+
+  it("restores a session", () => {
+    const state = useMatchDayStore.getState();
+    const session = { stage: "venue", ticket: { match: "Test" } } as any;
+    state.restoreSession(session);
+    
+    const next = useMatchDayStore.getState();
+    expect(next.stage).toBe("venue");
+    expect(next.ticket).toEqual({ match: "Test" });
+  });
+
+  it("onRehydrateStorage resets state if session is expired", () => {
+    const middleware = (useMatchDayStore.persist as any).getOptions().onRehydrateStorage();
+    const state = { 
+      sessionCreatedAt: Date.now() - 50 * 60 * 60 * 1000, // 50 hours ago (>48h)
+      savedSessions: [{ stage: "old" }],
+      reset: vi.fn(),
+      setSavedSessions: vi.fn(),
+      setStage: vi.fn(),
+    };
+    
+    middleware(state);
+    expect(state.reset).toHaveBeenCalled();
+    expect(state.setSavedSessions).toHaveBeenCalledWith([{ stage: "old" }]);
+  });
+
+  it("onRehydrateStorage redirects to landing if ticket is missing", () => {
+    const middleware = (useMatchDayStore.persist as any).getOptions().onRehydrateStorage();
+    const state = { 
+      ticket: null,
+      stage: "venue",
+      setStage: vi.fn(),
+    };
+    
+    middleware(state);
+    expect(state.setStage).toHaveBeenCalledWith("landing");
+  });
+
+  it("onRehydrateStorage does nothing if state is null", () => {
+    const middleware = (useMatchDayStore.persist as any).getOptions().onRehydrateStorage();
+    expect(() => middleware(null)).not.toThrow();
+  });
 });

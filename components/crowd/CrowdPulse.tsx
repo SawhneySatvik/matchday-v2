@@ -18,6 +18,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useMatchDayStore, CrowdZone, MatchPhase } from "@/lib/store";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
+
 
 const PHASE_OPTIONS: { id: MatchPhase; label: string; emoji: string }[] = [
   { id: "pre-match", label: "Pre-match", emoji: "🏟️" },
@@ -60,7 +62,7 @@ const ZONE_ICONS: Record<string, React.ElementType> = {
   "Exit Gates": LogOut,
 };
 
-export function CrowdPulse() {
+export function CrowdPulse(): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -73,7 +75,7 @@ export function CrowdPulse() {
     setCrowdData,
   } = useMatchDayStore();
 
-  const fetchCrowdData = useCallback(async (phase: MatchPhase) => {
+  const fetchCrowdData = useCallback(async (phase: MatchPhase): Promise<void> => {
     if (!ticket) return;
 
     // Check cache first — 15 min TTL
@@ -99,10 +101,11 @@ export function CrowdPulse() {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed");
-      const { zones } = await res.json();
+      if (!res.ok) throw new Error("Crowd fetch failed");
+      const { zones } = (await res.json()) as { zones: CrowdZone[] };
       setCrowdCache(phase, zones); // Saves to cache + sets crowdData
-    } catch {
+      trackEvent("crowd_checked", { phase, zoneCount: zones.length });
+    } catch (error: unknown) {
       toast.error("Couldn't fetch crowd data.");
     } finally {
       setIsLoading(false);

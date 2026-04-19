@@ -1,7 +1,10 @@
-// app/api/crowd-intelligence/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getJsonFlashModel, parseGeminiJSON } from "@/lib/gemini";
+import { getVertexJsonFlashModel, parseGeminiJSON } from "@/lib/gemini";
 import { CrowdZone } from "@/lib/store";
+import { logInfo, logError, logApiCall } from "@/lib/logger";
+import { getEnv } from "@/lib/env";
+
+const ROUTE_NAME = "/api/crowd-intelligence";
 
 const CROWD_PROMPT = (
   venue: string,
@@ -61,12 +64,22 @@ Rules:
 - coords should be approximate positions around the venue (spread them visually)
 - Return ONLY the JSON array`;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const start = Date.now();
   try {
+    const env = getEnv(); // Validate env vars
     const { venue, gate, stand, section, kickoffTime, matchPhase } =
-      await req.json();
+      (await req.json()) as {
+        venue: string;
+        gate: string;
+        stand: string;
+        section: string;
+        kickoffTime: string;
+        matchPhase: string;
+      };
 
     if (!venue || !matchPhase) {
+      logApiCall(ROUTE_NAME, Date.now() - start, 400);
       return NextResponse.json(
         { error: "venue and matchPhase are required" },
         { status: 400 }
@@ -81,7 +94,7 @@ export async function POST(req: NextRequest) {
       "Exit Gates (all exit points)",
     ].join("\n");
 
-    const model = getJsonFlashModel();
+    const model = getVertexJsonFlashModel();
     const prompt = CROWD_PROMPT(
       venue,
       gate || "Main Gate",
@@ -92,17 +105,23 @@ export async function POST(req: NextRequest) {
       venueZones
     );
 
-    console.log("[crowd-intelligence] Generating for phase:", matchPhase);
+    logInfo(ROUTE_NAME, { message: "Generating crowd intelligence", phase: matchPhase, venue });
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    
+    // Extract text safely from Vertex AI response
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const zones = parseGeminiJSON<CrowdZone[]>(text, "crowd-intelligence");
 
+    logApiCall(ROUTE_NAME, Date.now() - start, 200);
+
     return NextResponse.json({ zones });
-  } catch (error) {
-    console.error("[crowd-intelligence] Error:", error);
+  } catch (error: unknown) {
+    logError(ROUTE_NAME, error);
+    logApiCall(ROUTE_NAME, Date.now() - start, 500);
     return NextResponse.json(
       { error: "Failed to generate crowd intelligence." },
       { status: 500 }
     );
   }
 }
+

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import * as gemini from "@/lib/gemini";
-import { POST } from "./route";
+import { POST } from "@/app/api/extract-ticket/route";
 
 vi.mock("@/lib/gemini", () => ({
   getJsonProModel: vi.fn(),

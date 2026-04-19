@@ -8,12 +8,13 @@ import { Upload, Ticket, Loader2, CheckCircle2, AlertCircle, Clock, MapPin, Tras
 import { cn } from "@/lib/utils";
 import { useMatchDayStore, TicketData } from "@/lib/store";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
 
 const STORAGE_KEY = "matchday_saved_tickets";
 
 type UploadState = "idle" | "loading" | "success" | "error";
 
-export function TicketUpload() {
+export function TicketUpload(): React.JSX.Element {
   const [state, setState] = useState<UploadState>("idle");
   const [preview, setPreview] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -23,17 +24,17 @@ export function TicketUpload() {
     setMounted(true);
   }, []);
 
-  function clearSavedSessions() {
+  function clearSavedSessions(): void {
     setSavedSessions([]);
     toast.success("Recent sessions cleared");
   }
 
-  function loadSavedSession(session: any) {
+  function loadSavedSession(session: Partial<import("@/lib/store").MatchDayStore>): void {
     restoreSession(session);
     toast.success(`Resumed ${session.ticket?.match}`);
   }
 
-  const processTicket = async (file: File) => {
+  const processTicket = async (file: File): Promise<void> => {
     setState("loading");
 
     // Convert to base64
@@ -55,19 +56,22 @@ export function TicketUpload() {
       });
 
       if (!res.ok) throw new Error("Extraction failed");
-      const { ticket } = await res.json();
+      const { ticket } = (await res.json()) as { ticket: TicketData };
 
       setTicket(ticket);
+      trackEvent("ticket_scanned", { venue: ticket.venue, stand: ticket.stand });
       setState("success");
 
       setTimeout(() => {
         setStage("onboarding");
       }, 1200);
-    } catch {
+    } catch (error: unknown) {
       setState("error");
-      toast.error("Couldn't read this ticket. Try a clearer photo.");
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Couldn't read this ticket: ${message}. Try a clearer photo.`);
     }
   };
+
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {

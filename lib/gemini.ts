@@ -1,9 +1,13 @@
-// lib/gemini.ts
 import { GoogleGenerativeAI, GenerativeModel, Part } from "@google/generative-ai";
+import { VertexAI, GenerativeModel as VertexGenerativeModel } from "@google-cloud/vertexai";
 import JSON5 from "json5";
 
 let genAI: GoogleGenerativeAI | null = null;
+let vertexAI: VertexAI | null = null;
 
+/**
+ * Get internal AI Studio client.
+ */
 function getClient(): GoogleGenerativeAI {
   if (!genAI) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -13,9 +17,30 @@ function getClient(): GoogleGenerativeAI {
   return genAI;
 }
 
+/**
+ * Get internal Vertex AI client.
+ * @returns VertexAI client
+ */
+function getVertexAI(): VertexAI {
+  if (!vertexAI) {
+    const project = process.env.GOOGLE_CLOUD_PROJECT;
+    if (!project) throw new Error("GOOGLE_CLOUD_PROJECT is not set");
+    vertexAI = new VertexAI({
+      project,
+      location: "asia-south1",
+    });
+  }
+  return vertexAI;
+}
+
+
+/**
+ * Returns a Gemini 1.5 Flash model from AI Studio.
+ * @returns GenerativeModel
+ */
 export function getFlashModel(): GenerativeModel {
   return getClient().getGenerativeModel({
-    model: "gemma-4-31b-it",
+    model: "gemini-1.5-flash",
     generationConfig: {
       temperature: 0.3,
       topP: 0.8,
@@ -23,9 +48,13 @@ export function getFlashModel(): GenerativeModel {
   });
 }
 
+/**
+ * Returns a Gemini 1.5 Flash model from AI Studio with JSON response mime type.
+ * @returns GenerativeModel
+ */
 export function getJsonFlashModel(): GenerativeModel {
   return getClient().getGenerativeModel({
-    model: "gemma-4-31b-it",
+    model: "gemini-1.5-flash",
     generationConfig: {
       temperature: 0.3,
       topP: 0.8,
@@ -34,9 +63,13 @@ export function getJsonFlashModel(): GenerativeModel {
   });
 }
 
+/**
+ * Returns a Gemini 1.5 Pro model from AI Studio.
+ * @returns GenerativeModel
+ */
 export function getProModel(): GenerativeModel {
   return getClient().getGenerativeModel({
-    model: "gemma-4-31b-it",
+    model: "gemini-1.5-pro",
     generationConfig: {
       temperature: 0.4,
       topP: 0.85,
@@ -44,9 +77,13 @@ export function getProModel(): GenerativeModel {
   });
 }
 
+/**
+ * Returns a Gemini 1.5 Pro model from AI Studio with JSON response mime type.
+ * @returns GenerativeModel
+ */
 export function getJsonProModel(): GenerativeModel {
   return getClient().getGenerativeModel({
-    model: "gemma-4-31b-it",
+    model: "gemini-1.5-pro",
     generationConfig: {
       temperature: 0.4,
       topP: 0.85,
@@ -55,18 +92,53 @@ export function getJsonProModel(): GenerativeModel {
   });
 }
 
+/**
+ * Returns a Gemini 1.5 Flash model from Vertex AI.
+ * @returns VertexGenerativeModel
+ */
+export function getVertexFlashModel(): VertexGenerativeModel {
+  return getVertexAI().getGenerativeModel({
+    model: "gemini-1.5-flash-001",
+    generationConfig: {
+      temperature: 0.3,
+      topP: 0.8,
+    },
+  });
+}
+
+/**
+ * Returns a Gemini 1.5 Flash model from Vertex AI with JSON response mime type.
+ * @returns VertexGenerativeModel
+ */
+export function getVertexJsonFlashModel(): VertexGenerativeModel {
+  return getVertexAI().getGenerativeModel({
+    model: "gemini-1.5-flash-001",
+    generationConfig: {
+      temperature: 0.3,
+      topP: 0.8,
+      responseMimeType: "application/json",
+    },
+  });
+}
+
+/**
+ * Parses a potentially messy JSON string from Gemini, cleaning markdown markers.
+ * @template T - The expected return type
+ * @param text - The raw response text from Gemini
+ * @param contextName - Logging context name
+ * @returns The parsed JSON object of type T
+ * @throws Error if no valid JSON can be extracted
+ */
 export function parseGeminiJSON<T>(text: string, contextName: string = "gemini"): T {
   // 1. Try extracting an explicitly labeled markdown block
   const mdMatch = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/i);
-  const coreText = mdMatch ? mdMatch[1] : text;
+  const coreText = mdMatch?.[1] ?? text;
 
   // 2. Sliding window parse: hunt for the true JSON payload
-  // If the model output conversational filler, the first '{' or '[' might be 
-  // inside the filler text itself, throwing off a simple regex match.
   const startChars = ['{', '['];
   for (let i = 0; i < coreText.length; i++) {
     const char = coreText[i];
-    if (startChars.includes(char)) {
+    if (char && startChars.includes(char)) {
       const endChar = char === '{' ? '}' : ']';
       const lastIndex = coreText.lastIndexOf(endChar);
       
@@ -74,23 +146,25 @@ export function parseGeminiJSON<T>(text: string, contextName: string = "gemini")
         const slice = coreText.substring(i, lastIndex + 1);
         try {
           const parsed = JSON5.parse(slice);
-          console.log(`[${contextName}] Cleaned json payload:`, slice);
+          // Only log in dev/test if needed, but for prompt instruction we suppress direct console.log later.
+          // For now, keep it compatible but maybe use the new logger in actual app routes.
           return parsed as T;
         } catch (err) {
-          // Invalid chunk (e.g. grabbed an opening bracket from conversational text 
-          // all the way to a closing bracket from the actual JSON block). 
-          // Ignore and keep hunting!
+          // Keep hunting
         }
       }
     }
   }
 
-  // 3. Complete failure
-  console.error(`[${contextName}] JSON parsing completely failed! Text was:`, text);
   throw new Error(`[${contextName}] Could not extract parseable JSON from response.`);
 }
 
-// Build image part for multimodal calls
+/**
+ * Builds an image part for multimodal Gemini calls.
+ * @param base64Data - Base64 encoded image data
+ * @param mimeType - Image mime type
+ * @returns Part object for use in generateContent
+ */
 export function buildImagePart(base64Data: string, mimeType: string): Part {
   return {
     inlineData: {
@@ -99,5 +173,3 @@ export function buildImagePart(base64Data: string, mimeType: string): Part {
     },
   };
 }
-
-// TODO(01:12): Integrate Gemini API client for AI-powered workflows

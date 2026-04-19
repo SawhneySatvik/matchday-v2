@@ -150,8 +150,9 @@ export function LandingPage() {
             style={{
               y: ctaY,
               opacity: ctaOpacity,
-              pointerEvents: ctaPointerEvents as any,
+              pointerEvents: ctaPointerEvents as unknown as "auto" | "none",
             }}
+
             className="absolute z-20 flex flex-col items-center w-full px-4 text-center"
           >
             <h2

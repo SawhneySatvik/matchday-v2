@@ -1,4 +1,3 @@
-// lib/utils.ts
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -13,5 +12,3 @@ export function formatTime(date: Date): string {
     hour12: true,
   });
 }
-
-// TODO(01:12): Add utility helpers for formatting and shared logic

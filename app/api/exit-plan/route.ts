@@ -1,7 +1,10 @@
-// app/api/exit-plan/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getJsonFlashModel, parseGeminiJSON } from "@/lib/gemini";
+import { getVertexJsonFlashModel, parseGeminiJSON } from "@/lib/gemini";
 import { ExitPlan } from "@/lib/store";
+import { logInfo, logError, logApiCall } from "@/lib/logger";
+import { getEnv } from "@/lib/env";
+
+const ROUTE_NAME = "/api/exit-plan";
 
 const EXIT_PLAN_PROMPT = (
   venue: string,
@@ -49,8 +52,10 @@ Rules:
 - Factor in the score — blowout games see earlier departures
 - Return ONLY the JSON object`;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const start = Date.now();
   try {
+    const env = getEnv(); // Validate env vars
     const {
       venue,
       gate,
@@ -60,16 +65,26 @@ export async function POST(req: NextRequest) {
       matchMinute,
       score,
       transportMode,
-    } = await req.json();
+    } = (await req.json()) as {
+      venue: string;
+      gate: string;
+      stand: string;
+      section: string;
+      kickoffTime: string;
+      matchMinute: string;
+      score: string;
+      transportMode: string;
+    };
 
     if (!venue) {
+      logApiCall(ROUTE_NAME, Date.now() - start, 400);
       return NextResponse.json(
         { error: "venue is required" },
         { status: 400 }
       );
     }
 
-    const model = getJsonFlashModel();
+    const model = getVertexJsonFlashModel();
     const prompt = EXIT_PLAN_PROMPT(
       venue,
       gate || "Main Gate",
@@ -81,17 +96,22 @@ export async function POST(req: NextRequest) {
       transportMode || "transit"
     );
 
-    console.log("[exit-plan] Generating exit plan for:", venue);
+    logInfo(ROUTE_NAME, { message: "Generating exit plan", venue, score });
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    
+    // Extract text safely from Vertex AI response
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const exitPlan = parseGeminiJSON<ExitPlan>(text, "exit-plan");
 
+    logApiCall(ROUTE_NAME, Date.now() - start, 200);
     return NextResponse.json({ exitPlan });
-  } catch (error) {
-    console.error("[exit-plan] Error:", error);
+  } catch (error: unknown) {
+    logError(ROUTE_NAME, error);
+    logApiCall(ROUTE_NAME, Date.now() - start, 500);
     return NextResponse.json(
       { error: "Failed to generate exit plan." },
       { status: 500 }
     );
   }
 }
+

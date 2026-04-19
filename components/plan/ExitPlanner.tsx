@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useMatchDayStore, ExitPlan } from "@/lib/store";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/analytics";
 
 const CROWD_CONFIG = {
   LOW: {
@@ -39,7 +40,7 @@ const CROWD_CONFIG = {
   },
 };
 
-export function ExitPlanner() {
+export function ExitPlanner(): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false);
   const [matchMinute, setMatchMinute] = useState("85");
   const [score, setScore] = useState("");
@@ -47,7 +48,7 @@ export function ExitPlanner() {
 
   const { ticket, preferences, exitPlan, setExitPlan } = useMatchDayStore();
 
-  async function generateExitPlan() {
+  async function generateExitPlan(): Promise<void> {
     if (!ticket) return;
     setIsLoading(true);
 
@@ -67,9 +68,10 @@ export function ExitPlanner() {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed");
-      const { exitPlan: plan } = await res.json();
+      if (!res.ok) throw new Error("Exit plan failed");
+      const { exitPlan: plan } = (await res.json()) as { exitPlan: ExitPlan };
       setExitPlan(plan);
+      trackEvent("exit_plan_generated", { minute: matchMinute, level: plan.estimatedCrowdLevel });
       toast.success("Exit plan generated!");
     } catch {
       toast.error("Couldn't generate exit plan.");
@@ -77,6 +79,7 @@ export function ExitPlanner() {
       setIsLoading(false);
     }
   }
+
 
   return (
     <motion.div

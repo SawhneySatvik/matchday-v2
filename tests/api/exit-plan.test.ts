@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import * as gemini from "@/lib/gemini";
-import { POST } from "./route";
+import { POST } from "@/app/api/exit-plan/route";
 
 vi.mock("@/lib/gemini", () => ({
-  getJsonFlashModel: vi.fn(),
+  getVertexJsonFlashModel: vi.fn(),
   parseGeminiJSON: vi.fn(),
 }));
+
 
 describe("POST /api/exit-plan", () => {
   beforeEach(() => {
@@ -31,9 +32,10 @@ describe("POST /api/exit-plan", () => {
       response: { text: () => '{"leaveByTime":"85th minute"}' },
     });
 
-    vi.mocked(gemini.getJsonFlashModel).mockReturnValue({
+    vi.mocked(gemini.getVertexJsonFlashModel).mockReturnValue({
       generateContent,
     } as any);
+
     vi.mocked(gemini.parseGeminiJSON).mockReturnValue({
       leaveByTime: "85th minute",
       recommendedGate: "Gate 4",

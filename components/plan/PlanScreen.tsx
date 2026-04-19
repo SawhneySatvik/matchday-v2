@@ -26,6 +26,7 @@ import { StadiumChat } from "@/components/chat/StadiumChat";
 import { ExitPlanner } from "@/components/plan/ExitPlanner";
 import { toast } from "sonner";
 import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
+import { trackEvent } from "@/lib/analytics";
 
 const PLAN_TYPE_CONFIG: Record<
   PlanItem["type"],
@@ -39,7 +40,7 @@ const PLAN_TYPE_CONFIG: Record<
   break: { icon: Coffee, color: "text-muted-foreground", bg: "bg-muted border-border" },
 };
 
-export function PlanScreen() {
+export function PlanScreen(): React.JSX.Element {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [planUpdateInput, setPlanUpdateInput] = useState("");
@@ -60,7 +61,7 @@ export function PlanScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function generatePlan() {
+  async function generatePlan(): Promise<void> {
     if (!ticket) return;
     setIsGenerating(true);
 
@@ -126,8 +127,9 @@ Rules:
       });
 
       if (!res.ok) throw new Error();
-      const { plan: generatedPlan } = await res.json();
+      const { plan: generatedPlan } = (await res.json()) as { plan: PlanItem[] };
       setPlan(generatedPlan);
+      trackEvent("plan_generated", { eventCount: generatedPlan.length });
     } catch {
       toast.error("Couldn't generate plan. Try again.");
     } finally {
@@ -135,7 +137,7 @@ Rules:
     }
   }
 
-  async function handlePlanUpdate(text: string) {
+  async function handlePlanUpdate(text: string): Promise<void> {
     if (!text.trim() || isUpdating || !ticket) return;
     setIsUpdating(true);
     setPlanUpdateInput("");
@@ -158,15 +160,20 @@ Rules:
       });
 
       if (!res.ok) throw new Error("Update failed");
-      const { response, updatedPlan } = await res.json();
+      const { response, updatedPlan } = (await res.json()) as { 
+        response: string; 
+        updatedPlan: PlanItem[] | null 
+      };
 
       addChatMessage({ role: "user", content: text.trim(), timestamp: new Date().toISOString() });
       addChatMessage({ role: "assistant", content: response, timestamp: new Date().toISOString() });
 
       if (updatedPlan) {
         setPlan(updatedPlan);
+        trackEvent("plan_updated", { success: true });
         toast.success("Plan updated based on your input!");
       } else {
+        trackEvent("plan_updated", { success: false });
         toast.info("AI responded but didn't regenerate the plan.");
       }
     } catch {
@@ -175,6 +182,7 @@ Rules:
       setIsUpdating(false);
     }
   }
+
 
   function parseEmailFromCredential(credential: string): string | null {
     try {

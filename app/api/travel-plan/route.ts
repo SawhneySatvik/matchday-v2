@@ -1,7 +1,10 @@
-// app/api/travel-plan/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getJsonFlashModel, parseGeminiJSON } from "@/lib/gemini";
 import { TravelOption } from "@/lib/store";
+import { logInfo, logError, logApiCall } from "@/lib/logger";
+import { getEnv } from "@/lib/env";
+
+const ROUTE_NAME = "/api/travel-plan";
 
 // SAVE TO PROMPT LIBRARY
 const TRAVEL_PLAN_PROMPT = (
@@ -62,11 +65,20 @@ Rules:
 - Steps should be specific to the actual city/route
 - Return ONLY the JSON array`;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const start = Date.now();
   try {
-    const { venue, kickoffTime, date, userLocation, gate } = await req.json();
+    const env = getEnv(); // Validate env vars
+    const { venue, kickoffTime, date, userLocation, gate } = (await req.json()) as {
+      venue: string;
+      kickoffTime: string;
+      date: string;
+      userLocation: string;
+      gate: string;
+    };
 
     if (!venue || !kickoffTime || !userLocation) {
+      logApiCall(ROUTE_NAME, Date.now() - start, 400);
       return NextResponse.json(
         { error: "venue, kickoffTime, and userLocation are required" },
         { status: 400 }
@@ -76,23 +88,23 @@ export async function POST(req: NextRequest) {
     const model = getJsonFlashModel();
     const prompt = TRAVEL_PLAN_PROMPT(venue, kickoffTime, date, userLocation, gate);
     
-    console.log("[travel-plan] Sending prompt to Gemini with venue:", venue);
+    logInfo(ROUTE_NAME, { message: "Generating travel options", venue, userLocation });
     const result = await model.generateContent(prompt);
     
-    const candidate = result.response.candidates?.[0];
-    console.log("[travel-plan] Gemini finish reason:", candidate?.finishReason);
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    logInfo(ROUTE_NAME, { message: "Gemini response received", finishReason });
     
     const text = result.response.text();
     const options = parseGeminiJSON<TravelOption[]>(text, "travel-plan");
 
+    logApiCall(ROUTE_NAME, Date.now() - start, 200);
     return NextResponse.json({ options });
-  } catch (error) {
-    console.error("[travel-plan] Error:", error);
+  } catch (error: unknown) {
+    logError(ROUTE_NAME, error);
+    logApiCall(ROUTE_NAME, Date.now() - start, 500);
     return NextResponse.json(
       { error: "Failed to generate travel plan." },
       { status: 500 }
     );
   }
 }
-
-// TODO(01:12): Implement travel planning API based on venue and timing
