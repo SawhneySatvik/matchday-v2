@@ -17,13 +17,15 @@ import {
   Calendar,
   RefreshCw,
   Send,
-  LogOut,
+  Mail,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMatchDayStore, PlanItem } from "@/lib/store";
 import { StadiumChat } from "@/components/chat/StadiumChat";
 import { ExitPlanner } from "@/components/plan/ExitPlanner";
 import { toast } from "sonner";
+import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
 
 const PLAN_TYPE_CONFIG: Record<
   PlanItem["type"],
@@ -42,9 +44,15 @@ export function PlanScreen() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [planUpdateInput, setPlanUpdateInput] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [googleCredential, setGoogleCredential] = useState<string | null>(null);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [sentEmail, setSentEmail] = useState<string | null>(null);
 
   const { ticket, preferences, selectedTravel, venueInfo, plan, setPlan, chatHistory, matchPhase, crowdData, addChatMessage } =
     useMatchDayStore();
+
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
     if (plan.length > 0 || !ticket) return;
@@ -165,6 +173,63 @@ Rules:
       toast.error("Couldn't update plan.");
     } finally {
       setIsUpdating(false);
+    }
+  }
+
+  function parseEmailFromCredential(credential: string): string | null {
+    try {
+      const payloadSegment = credential.split(".")[1];
+      if (!payloadSegment) return null;
+      const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = JSON.parse(atob(normalized));
+      return decoded?.email || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function handleGoogleSuccess(response: CredentialResponse) {
+    if (!response.credential) {
+      toast.error("Google sign-in failed. Please retry.");
+      return;
+    }
+
+    setGoogleCredential(response.credential);
+    const email = parseEmailFromCredential(response.credential);
+    setGoogleEmail(email);
+    setSentEmail(null);
+    toast.success(email ? `Signed in as ${email}` : "Google sign-in complete");
+  }
+
+  async function sendPlanToEmail() {
+    if (!googleCredential || !ticket || plan.length === 0) return;
+
+    setIsSendingEmail(true);
+    try {
+      const res = await fetch("/api/send-plan-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credential: googleCredential,
+          ticket,
+          preferences,
+          selectedTravel,
+          plan,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Could not send email");
+      }
+
+      setSentEmail(data.email || googleEmail || "your inbox");
+      toast.success(`Plan sent to ${data.email || googleEmail || "your inbox"}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not send email";
+      toast.error(message);
+    } finally {
+      setIsSendingEmail(false);
     }
   }
 
@@ -378,6 +443,77 @@ Rules:
           {!isGenerating && plan.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border/50">
               <ExitPlanner />
+            </div>
+          )}
+
+          {/* End-of-session email share */}
+          {!isGenerating && plan.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <div className="glass rounded-2xl p-4 md:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">End session with a backup</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Sign in with Google and send this plan to your email before you close your session.
+                    </p>
+
+                    {!googleClientId && (
+                      <p className="text-xs text-destructive mt-3">
+                        Missing `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in environment.
+                      </p>
+                    )}
+
+                    {googleClientId && !googleCredential && (
+                      <div className="mt-3">
+                        <GoogleLogin
+                          onSuccess={handleGoogleSuccess}
+                          onError={() => toast.error("Google sign-in failed")}
+                          useOneTap={false}
+                          text="signin_with"
+                          shape="pill"
+                          theme="filled_black"
+                        />
+                      </div>
+                    )}
+
+                    {googleCredential && (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <div className="inline-flex items-center gap-1.5 text-xs text-accent">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>{googleEmail ? `Signed in as ${googleEmail}` : "Google verified"}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={sendPlanToEmail}
+                            disabled={isSendingEmail}
+                            className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60"
+                          >
+                            {isSendingEmail ? "Sending..." : "Send plan to my email"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setGoogleCredential(null);
+                              setGoogleEmail(null);
+                              setSentEmail(null);
+                            }}
+                            className="px-3 py-2 rounded-xl bg-muted text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Use another Google account
+                          </button>
+                        </div>
+
+                        {sentEmail && (
+                          <p className="text-xs text-accent">Plan emailed successfully to {sentEmail}.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

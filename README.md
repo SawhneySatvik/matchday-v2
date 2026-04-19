@@ -9,6 +9,9 @@
 [![Powered by Gemini](https://img.shields.io/badge/Gemini-1.5%20Pro%20%2B%20Flash-4285F4?style=for-the-badge&logo=google)](https://aistudio.google.com)
 [![Google Maps](https://img.shields.io/badge/Google%20Maps-Platform-34A853?style=for-the-badge&logo=google-maps)](https://developers.google.com/maps)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![OAuth2](https://img.shields.io/badge/OAuth2-Google%20Sign--In-4285F4?style=for-the-badge&logo=google)](https://oauth.net/2/)
+[![Cloud Run](https://img.shields.io/badge/Cloud%20Run-Google%20Cloud-4285F4?style=for-the-badge&logo=google-cloud)](https://cloud.google.com/run)
+[![Google Cloud Platform](https://img.shields.io/badge/Google%20Cloud-Platform-4285F4?style=for-the-badge&logo=google-cloud)](https://cloud.google.com)
  
 ---
  
@@ -281,7 +284,32 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # Google Maps API Key — get from https://console.cloud.google.com
 # Enable: Maps JavaScript API, Places API, Routes API, Geocoding API
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_maps_api_key_here
+
+# Google OAuth (for end-session "Email my plan")
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
+GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
+
+# SMTP credentials (used by /api/send-plan-email)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_username_here
+SMTP_PASS=your_smtp_password_here
+SMTP_FROM="MatchDay <no-reply@yourdomain.com>"
 ```
+
+### End-of-Session Plan Email (Google Auth)
+
+At the bottom of the plan screen, users can:
+
+1. Sign in with Google.
+2. Tap **Send plan to my email**.
+3. Receive their full generated timeline in inbox.
+
+Implementation notes:
+
+- Google sign-in is handled in `components/plan/PlanScreen.tsx`.
+- Email sending is handled by `app/api/send-plan-email/route.ts`.
+- The backend verifies Google ID tokens before sending mail.
  
 **Required Google Cloud APIs:**
 - Maps JavaScript API
@@ -363,13 +391,13 @@ npm run test:e2e
 
 Current test scores (latest local run):
 
-- Test Files: `11/11` passed
-- Tests: `29/29` passed
+- Test Files: `12/12` passed
+- Tests: `32/32` passed
 - Coverage (all files):
-    - Statements: `88.26%`
-    - Branches: `97.35%`
-    - Functions: `89.38%`
-    - Lines: `89.54%`
+    - Statements: `89.62%`
+    - Branches: `93.02%`
+    - Functions: `81.69%`
+    - Lines: `90.76%`
 
 Current baseline covers:
 
