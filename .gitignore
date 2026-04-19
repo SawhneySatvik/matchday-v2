@@ -13,3 +13,10 @@ commit.py
 
 .agent
 .agent/
+
+coverage
+coverage/
+playwright-report
+playwright-report/
+test-results
+test-results/
